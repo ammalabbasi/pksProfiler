@@ -1,21 +1,25 @@
-# PKSFinder
+# pksProfiler
 
-**PKSFinder** detects and profiles **polyketide synthase (PKS)** gene signatures from **unmapped sequencing reads**. It identifies PKS presence, estimates abundance, assigns a microbial species origin, and provides a confidence score for each hit.
+**pksProfiler** is a computational framework for the detection and quantitative profiling of **polyketide synthase (PKS)** gene signatures from **unmapped high-throughput sequencing reads** derived from **cancer genomes** and **metagenomic datasets**.
 
 ---
 
-## 🔧 Features
+## Key Features
 
-- Accepts **unmapped FASTQ/BAM** reads
-- Detects **PKS domains** using bowtie2 alignment
-- Assigns **species origin** for each PKS hit
-- Reports **abundance** and **confidence scores**
+1. **Detection of PKS gene signatures** in unmapped sequencing reads  
+2. **Quantification of PKS island gene abundances** using two independent and complementary analytical approaches  
+3. **Assignment of putative microbial species of origin** for detected PKS loci
+
+---
+
+## Workflow Schematic
+<img src="https://github.com/ammalabbasi/pksProfiler/workflow_logo/Figure1.v1.png">
 
 ---
 
 ## 🚀 Quick Start
 
-## How to run PKSFinder pipeline
+## How to run pksProfiler pipeline
 1. Install [Nextflow](https://www.nextflow.io/docs/latest/install.html) as a conda environment
 2. Make sure you have the following folders and files in your working directory:
   - main.nf
