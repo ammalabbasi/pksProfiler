@@ -1,19 +1,33 @@
 # pksProfiler
 
-**pksProfiler** is a computational framework for the detection and quantitative profiling of **polyketide synthase (PKS)** gene signatures from **unmapped high-throughput sequencing reads** derived from **cancer genomes** and **metagenomic datasets**.
+**pksProfiler** is a scalable, Nextflow-based computational framework for the detection, quantification, and visualization of the *pks* (polyketide synthase) pathogenicity island from high-throughput sequencing data. It is designed to profile *pks* signals from cancer sequencing datasets (e.g., WGS, WES, RNA-seq) as well as microbiome-enriched metagenomic samples, with gene-level resolution across the 19-gene *clb* biosynthetic cluster.
 
 ---
 
 ## Key Features
 
-1. **Detection of PKS gene signatures** in unmapped sequencing reads  
-2. **Quantification of PKS island gene abundances** using two independent and complementary analytical approaches  
-3. **Assignment of putative microbial species of origin** for detected PKS loci
+1. Robust detection of *pks* and *clb* genes from host-depleted sequencing reads  
+2. Gene-level quantification of the *pks* island using two complementary approaches:
+   - Alignment-based profiling against a *pks*-positive *Escherichia coli* reference
+   - Hidden Markov model (HMM)–based detection for divergent or fragmented sequences  
+3. Visualization of *pks* island coverage and completeness  
+4. Taxonomic attribution of *pks*-associated reads to infer putative microbial origins  
+
+---
+
+## Workflow
+
+pksProfiler consists of three modular components:
+
+1. Host read depletion and quality control  
+2. *pks* island profiling using alignment-based and HMM-based approaches  
+3. Visualization and quantitative summarization of gene-level coverage
 
 ---
 
 ## Workflow Schematic
-<img src="https://github.com/ammalabbasi/pksProfiler/blob/main/workflow_logo/Figure1.v1.png">
+
+<img src="https://github.com/ammalabbasi/pksProfiler/blob/main/workflow_logo/v1.png" width="800"/>
 
 ---
 
@@ -64,4 +78,19 @@ nextflow run main.nf -resume
 # Optionally, you can recieve an notifiction email on completion with -N flag:
 nextflow run main.nf -N your_email@gmail.com
 ```
-8. Every process result and report will be stored in the **RESULT** folder
+8. All outputs, logs, and reports will be written to the RESULT/ directory.
+
+---
+
+## Outputs
+
+- Per-sample *clb* gene abundance tables  
+- Normalized *pks* island coverage profiles  
+- Visualization-ready files for island completeness assessment  
+- Taxonomic summaries of *pks*-associated reads  
+
+---
+
+## Citation
+
+
