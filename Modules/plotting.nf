@@ -4,66 +4,87 @@ process plotPKS {
 
     label 'process_low'
     scratch true
-    publishDir "${params.pks_dir}", mode: 'copy'
-    conda "${params.pks_env}"
+    publishDir "${params.pks_summary_dir}", mode: 'copy'
+    conda "${params.pks_align_env}"
 
     input:
     path coverage_file
 
     output:
-    path "*.pks.cirocs.pdf"
+    path "*.pks.cirocs.pdf", optional: true
 
     script:
     """
-    sample_name=\$(basename ${coverage_file} | cut -d '.' -f1)
+    sample_name="\$(basename ${coverage_file} | cut -d '.' -f1)"
     output_pdf="\${sample_name}.pks.cirocs.pdf"
 
     Rscript "${params.scripts}/plotPKS.R" ${coverage_file} "${params.pks_cytoband}" "\${output_pdf}"
     """
 }
 
-process plotECOLI {
+process plotGenome {
 
     label 'process_low'
     scratch true
-    publishDir "${params.pks_dir}", mode: 'copy'
-    conda "${params.pks_env}"
+    publishDir "${params.pks_summary_dir}", mode: 'copy'
+    conda "${params.pks_align_env}"
 
     input:
     path coverage_file
 
     output:
-    path "*.ecoli.cirocs.pdf"
+    path "*.genome.cirocs.pdf", optional: true
 
     script:
     """
-    sample_name=\$(basename ${coverage_file} | cut -d '.' -f1)
-    output_pdf="\${sample_name}.ecoli.cirocs.pdf"
+    sample_name="\$(basename ${coverage_file} | cut -d '.' -f1)"
+    output_pdf="\${sample_name}.genome.cirocs.pdf"
 
-    Rscript "${params.scripts}/plotECOLI.R" ${coverage_file} "${params.ecoli_cytoband}" "\${output_pdf}"
+    Rscript "${params.scripts}/plotGenome.R" ${coverage_file} "${params.ecoli_cytoband}" "\${output_pdf}"
     """
 }
 
-
-
-process masterTable {
+process masterTableAlign {
     label 'process_low'
     scratch true
-    publishDir "${params.pks_dir}", mode: 'copy'
-    conda "${params.pks_env}"
+    publishDir "${params.pks_summary_dir}", mode: 'copy'
+    conda "${params.pks_align_env}"
 
     input:
-    path coverage_files
+    val(count_files)
 
     output:
-    path "ecoli.pks.gene.counts.txt"
+    path "pks.gene.counts.align.txt"
 
-    script:
-    def coverage_str = coverage_files.collect { it.getName() }.join(' ')
+	script:
+    def inputs = count_files.collect { it.toString() }.join(' ')
 
     """
-    python "${params.scripts}/mergeGeneCounts.py" ${coverage_str} ecoli.pks.gene.counts.txt
+    python "${params.scripts}/mergeGeneCounts.py" ${inputs} pks.gene.counts.align.txt
     """
 }
 
 
+
+process masterTableHMM {
+    label 'process_medium'
+    scratch true
+    publishDir "${params.pks_summary_dir}", mode: 'copy'
+    conda "${params.pks_hmm_env}"
+
+    input:
+    val(count_files)
+
+    output:
+    path "pks.gene.counts.hmm.txt"
+
+    script:
+    def inputs = count_files.collect { it.toString() }.join(' ')
+
+    """
+    python3 "${params.scripts}/build_hmm_matrix.py" \
+      --inputs ${inputs} \
+      --out pks.gene.counts.hmm.txt \
+      --strip-suffix ".hmm_counts.tsv"
+    """
+}

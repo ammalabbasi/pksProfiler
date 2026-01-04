@@ -11,27 +11,21 @@ process mapReads {
 
     output:
     tuple val(sampleID),
-        path("${sampleID}.R1.UNMAPPED.FASTP.FILTERED.hg38.fastq.gz"),
-        path("${sampleID}.R1.UNMAPPED.FASTP.FILTERED.hg38.t2t.fastq.gz"),
         path("${sampleID}.R1.UNMAPPED.FASTP.FILTERED.hg38.t2t.pangenome.fastq.gz"),
-        path("${sampleID}.R2.UNMAPPED.FASTP.FILTERED.hg38.fastq.gz"),
-        path("${sampleID}.R2.UNMAPPED.FASTP.FILTERED.hg38.t2t.fastq.gz"),
         path("${sampleID}.R2.UNMAPPED.FASTP.FILTERED.hg38.t2t.pangenome.fastq.gz")
 
     script:
     """
-    out1="${sampleID}.R1.UNMAPPED.FASTP.FILTERED.hg38.fastq.gz"
-    out2="${sampleID}.R1.UNMAPPED.FASTP.FILTERED.hg38.t2t.fastq.gz"
-    out3="${sampleID}.R1.UNMAPPED.FASTP.FILTERED.hg38.t2t.pangenome.fastq.gz"
-    out4="${sampleID}.R2.UNMAPPED.FASTP.FILTERED.hg38.fastq.gz"
-    out5="${sampleID}.R2.UNMAPPED.FASTP.FILTERED.hg38.t2t.fastq.gz"
-    out6="${sampleID}.R2.UNMAPPED.FASTP.FILTERED.hg38.t2t.pangenome.fastq.gz"
+	set -euo pipefail
+
+    out1="${sampleID}.R1.UNMAPPED.FASTP.FILTERED.hg38.t2t.pangenome.fastq.gz"
+    out2="${sampleID}.R2.UNMAPPED.FASTP.FILTERED.hg38.t2t.pangenome.fastq.gz"
 
     # Skip condition
-    if [[ -f "${params.mapped_reads_dir}/\$out1" && -f "${params.mapped_reads_dir}/\$out2" && -f "${params.mapped_reads_dir}/\$out3" && -f "${params.mapped_reads_dir}/\$out4" && -f "${params.mapped_reads_dir}/\$out5" && -f "${params.mapped_reads_dir}/\$out6" ]]; then
-        echo "Skipping mapReads: Found \$out1, \$out2, \$out3, \$out4, \$out5, \$out6 in publishDir"
+    if [[ -f "${params.mapped_reads_dir}/\$out1" && -f "${params.mapped_reads_dir}/\$out2" ]]; then
+        echo "Skipping mapReads: Found \$out1, \$out2 in publishDir"
 
-        for f in "\$out1" "\$out2" "\$out3" "\$out4" "\$out5" "\$out6"; do
+        for f in "\$out1" "\$out2"; do
             if [[ ! -f "\$f" ]]; then
                 ln -s "${params.mapped_reads_dir}/\$f" . 2>/dev/null || cp "${params.mapped_reads_dir}/\$f" .
             fi
@@ -89,5 +83,6 @@ process mapReads {
     mv ${sampleID}.R2.UNMAPPED.FASTP.FILTERED.hg38.t2t.tmp.fastq.gz ${sampleID}.R2.UNMAPPED.FASTP.FILTERED.hg38.t2t.pangenome.fastq.gz
     """
 }
+
 
 

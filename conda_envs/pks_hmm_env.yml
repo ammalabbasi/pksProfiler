@@ -1,0 +1,15 @@
+name: pks_hmm_env
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  # HMM search
+  - hmmer=3.3.2
+
+  # FASTQ / FASTA utilities
+  - seqtk=1.4
+  - seqkit=2.6.1
+
+  # Parsing and shell utilities
+  - gawk
+  - coreutils

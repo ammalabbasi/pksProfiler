@@ -17,6 +17,19 @@ cytoband.df <- cytoband.df[, c('chrom', 'start', 'end', 'Name', 'gieStain')]
 cytoband.df <- mutate(cytoband.df, start = as.integer(start) +2193827)
 cytoband.df <- mutate(cytoband.df, end = as.integer(end) + 2193827)
 
+# Hard fail if the file is missing or empty
+if (!file.exists(coverage_file) || file.info(coverage_file)$size == 0) {
+  message("plotPKS.R: coverage file is missing or empty: ", coverage_file)
+  quit(status = 0)  # 0 = pipeline doesn't fail; use 1 if you want it to fail
+}
+
+# Also catch "looks empty" (whitespace only)
+first_line <- readLines(coverage_file, n = 1, warn = FALSE)
+if (length(first_line) == 0 || grepl("^\\s*$", first_line)) {
+  message("plotPKS.R: coverage file has no data lines: ", coverage_file)
+  quit(status = 0)
+}
+
 # Filter and adjust coverage
 coverage <- read.csv(coverage_file, sep = "\t", header = FALSE)
 colnames(coverage) <- c('chr', 'start', 'end', 'value')
@@ -32,18 +45,22 @@ coverage <- coverage[
 # Shift coordinates
 coverage$start <- as.integer(coverage$start) - 2193827
 coverage$end <- as.integer(coverage$end) - 2193827
+print(coverage)
+ 
 
-# Handle case where no coverage exists
 if (nrow(coverage) < 1) {
-  coverage <- cytoband.df
-  colnames(coverage) <- c('chrom', 'start', 'end')
-  coverage$start <- as.integer(coverage$start) - 2193827
-  coverage$end <- as.integer(coverage$end) - 2193827
-  coverage$value <- rep(0.00, nrow(coverage))
+  coverage <- data.frame(
+    chr   = cytoband.df$chrom,
+    start = as.integer(cytoband.df$start) + 2193827,
+    end   = as.integer(cytoband.df$end)   + 2193827,
+    value = rep(0, nrow(cytoband.df)),
+    stringsAsFactors = FALSE
+  )
 }
 
 # Extract sample name from coverage filename (optional)
-sample_name <- tools::file_path_sans_ext(basename(coverage_file))
+sample_name <- basename(coverage_file)
+sample_name <- sub("\\.coverage\\.bedgraph$", "", sample_name)
 
 # Open PDF device
 CairoPDF(output_pdf, width = 5, height = 5)
@@ -52,7 +69,7 @@ circos.clear()
 circos.par(gap.after=3, gap.before=3, ADD = TRUE)
 circos.initializeWithIdeogram(cytoband.df)
 #title(sample_name,  cex = 1.5, side = "top", adj = 0.5)
-circos.text(0, 1.1, sample_name, facing = "clockwise", cex = 1.2)
+#circos.text(0, 1.1, sample_name, facing = "clockwise", cex = 1.2)
 
 circos.labels(cytoband.df$chrom, x = as.numeric(cytoband.df$start), 
               labels = cytoband.df$Name, side = "inside", facing="clockwise", niceFacing=TRUE)
@@ -80,6 +97,6 @@ circos.yaxis(
   labels.niceFacing = TRUE,
   labels.col = "black"
 )
-
+title(sample_name,  cex = 1.5, side = "top", adj = 0.5)
 circos.clear()
 dev.off()
