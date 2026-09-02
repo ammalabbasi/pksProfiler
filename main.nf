@@ -3,8 +3,10 @@ nextflow.enable.dsl = 2
 // ---------------- Parameters ----------------
 params.sample = null
 
-params.input_data_type = "bam"         // bam | fastq
+params.input_data_type = "auto"        // auto | bam | cram | fastq
+params.cram_reference  = null          // optional; used and validated when supplied
 params.pks_taxa = false   // set true to run krakenuniq/bracken on pks-island reads
+params.save_intermediates = false // publish extracted/filtered/host-depleted FASTQs
 
 params.profiling_method = "bowtie2" // bowtie2 | hmm | both
 params.hmm_evalue       = 1e-10
@@ -28,10 +30,12 @@ params.pks_counts_dir = "${params.pks_summary_dir}/gene_counts"
 params.pks_coverage_plots_dir = "${params.pks_summary_dir}/coverage_plots"
 params.pks_taxonomy_dir = "${params.pks_summary_dir}/taxonomy"
 params.pks_taxonomy_plots_dir = "${params.pks_taxonomy_dir}/plots"
+params.pks_qc_dir = "${params.pks_summary_dir}/qc"
 
 // Databases and refs [CHANGE THIS]
 params.hg38_db      = null
 params.t2t_phix_db  = null
+params.pangenome_db = null
 params.adapters     = "${projectDir}/ref/known_adapters.fna"
 params.kraken_db= null
 
@@ -56,7 +60,7 @@ include { filterReads } from './Modules/filter_reads.nf'
 include { mapReads } from './Modules/map_reads.nf'
 include { pksProfiler_align as pksProfilerAlign } from './Modules/pksProfiler_align.nf'
 include { pksProfiler_hmm as pksProfilerHMM } from './Modules/pksProfiler_hmm.nf'
-include { plotPKS; masterTableAlign; masterTableHMM } from './Modules/plotting.nf'
+include { plotPKS; masterTableAlign; masterTableHMM; masterQCSummary } from './Modules/plotting.nf'
 include { extractPksIslandReads; Bracken; process_bracken as combinePKSTaxa; combineClbTaxonomySupport } from './Modules/pks_taxa.nf'
 include { plotBrackenTaxa as plotPKSTaxa } from './Modules/plot_bracken_taxa.nf'
 
@@ -103,13 +107,12 @@ workflow {
     }
 
     // ---------- STEP 1: Inputs + filtering ----------
-    if (!(params.input_data_type in ["bam", "fastq"])) {
-        exit 1, "Unknown --input_data_type: ${params.input_data_type}. Supported: bam, fastq"
+    if (!(params.input_data_type in ["auto", "bam", "cram", "fastq"])) {
+        exit 1, "Unknown --input_data_type: ${params.input_data_type}. Supported: auto, bam, cram, fastq"
     }
 
-    def required_sample_columns = params.input_data_type == "bam" ?
-        ["patient", "bam"] :
-        ["patient", "fastq1", "fastq2"]
+    def alignment_input = params.input_data_type in ["auto", "bam", "cram"]
+    def required_sample_columns = alignment_input ? ["patient"] : ["patient", "fastq1"]
 
     def sample_sheet = channel
         .fromPath(params.sample, checkIfExists: true)
@@ -121,6 +124,9 @@ workflow {
             }
 
             def observed_columns = rows[0].keySet()
+            if (alignment_input && !("alignment" in observed_columns) && !("bam" in observed_columns)) {
+                error "Alignment sample sheets require an alignment column (or legacy bam column)"
+            }
             def missing_columns = required_sample_columns.findAll { column ->
                 !(column in observed_columns)
             }
@@ -155,6 +161,13 @@ workflow {
                             error "Sample sheet row ${row_number} has an empty ${column} value"
                         }
                     }
+
+                if (alignment_input) {
+                    def alignment = row.alignment?.toString()?.trim() ?: row.bam?.toString()?.trim()
+                    if (!alignment) {
+                        error "Sample sheet row ${row_number} has an empty alignment value"
+                    }
+                }
             }
 
             if (duplicate_ids) {
@@ -164,28 +177,42 @@ workflow {
             rows
         }
 
-    if (params.input_data_type == "bam") {
+    def QC_FRAGMENTS = channel.empty()
 
-		// Expect columns: patient,bam
-		sample_sheet = sample_sheet.map { row ->
-		    tuple(row.patient, file(row.bam, checkIfExists: true))
-		}
+    if (alignment_input) {
 
-        extractReads(sample_sheet)
+			// Prefer patient,alignment; retain patient,bam for compatibility.
+			sample_sheet = sample_sheet.map { row ->
+			    def alignment = row.alignment?.toString()?.trim() ?: row.bam?.toString()?.trim()
+			    tuple(row.patient, file(alignment, checkIfExists: true))
+			}
+
+        EXTRACT_OUT = extractReads(sample_sheet)
+
+        EXTRACT_OUT.reads
             .map { sampleID, reads -> tuple(sampleID, [reads]) }
             .set { READS_TO_FILTER }
+
+        QC_FRAGMENTS = QC_FRAGMENTS.mix(
+            EXTRACT_OUT.qc.map { _sampleID, qc_file -> qc_file }
+        )
 
     } else if (params.input_data_type == "fastq") {
 
         def sample_sheet_fastq = sample_sheet
-            .map { row -> row.subMap('patient', 'fastq1', 'fastq2') }
             .map { row ->
+                def fastq_files = [
+                    file(row.fastq1, checkIfExists: true)
+                ]
+
+                def fastq2 = row.fastq2?.toString()?.trim()
+                if (fastq2) {
+                    fastq_files << file(fastq2, checkIfExists: true)
+                }
+
                 tuple(
                     row.patient,
-                    [
-                        file(row.fastq1, checkIfExists: true),
-                        file(row.fastq2, checkIfExists: true)
-                    ]
+                    fastq_files
                 )
             }
 
@@ -193,12 +220,24 @@ workflow {
 
     }
 
-    filterReads(READS_TO_FILTER)
+    FILTER_OUT = filterReads(READS_TO_FILTER)
+
+    FILTER_OUT.reads
         .set { FILTERED_UNMAPPED_READS }
 
+    QC_FRAGMENTS = QC_FRAGMENTS.mix(
+        FILTER_OUT.qc.map { _sampleID, qc_file -> qc_file }
+    )
+
 	// ---------- STEP 1b: Host read depletion ----------
-	mapReads(FILTERED_UNMAPPED_READS)
+	MAP_OUT = mapReads(FILTERED_UNMAPPED_READS)
+
+	MAP_OUT.reads
 	    .set { MAPPED_READS }
+
+    QC_FRAGMENTS = QC_FRAGMENTS.mix(
+        MAP_OUT.qc.map { _sampleID, qc_file -> qc_file }
+    )
 
 	// ---------- STEP 2: Profiling ----------
     def valid_methods = ["bowtie2", "hmm", "both"]
@@ -215,12 +254,24 @@ workflow {
     def do_hmm   = params.profiling_method in ["hmm", "both"]
 
     if (do_align) {
-        pksProfilerAlign(MAPPED_READS)
+        ALIGN_OUT = pksProfilerAlign(MAPPED_READS)
+
+        ALIGN_OUT.profile
             .set { PKS_ALIGN_OUT }
+
+        QC_FRAGMENTS = QC_FRAGMENTS.mix(
+            ALIGN_OUT.qc.map { _sampleID, qc_file -> qc_file }
+        )
     }
     if (do_hmm) {
-        pksProfilerHMM(MAPPED_READS)
+        HMM_OUT = pksProfilerHMM(MAPPED_READS)
+
+        HMM_OUT.profile
             .set { PKS_HMM_OUT }
+
+        QC_FRAGMENTS = QC_FRAGMENTS.mix(
+            HMM_OUT.qc.map { _sampleID, qc_file -> qc_file }
+        )
     }
 
     // ---------- STEP 3: Plotting (align only) ----------
@@ -300,4 +351,16 @@ workflow {
 
         masterTableHMM(HMM_COUNT_FILES)
     }
+
+    // ---------- STEP 5: Cohort QC ----------
+    QC_FRAGMENTS
+        .collect()
+        .set { QC_FRAGMENT_FILES }
+
+    def qc_summary_script = file(
+        "${params.scripts}/build_qc_summary.py",
+        checkIfExists: true
+    )
+
+    masterQCSummary(QC_FRAGMENT_FILES, qc_summary_script)
 }
